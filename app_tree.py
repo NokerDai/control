@@ -135,33 +135,53 @@ if tree.nodes:
     G = tree.to_graph()
 
     net = Network(height="750px", width="100%", directed=True, bgcolor="#ffffff")
+    
+    # Layout jerárquico: raíces arriba, descendientes abajo
+    net.set_options("""
+    var options = {
+      layout: {
+        hierarchical: {
+          enabled: true,
+          direction: 'UD',
+          sortMethod: 'directed',
+          levelSeparation: 150,
+          nodeSpacing: 200
+        }
+      },
+      physics: {
+        enabled: false
+      }
+    }
+    """)
     net.barnes_hut()
 
-    # Añadir nodos como tarjetas
+    # Añadir nodos como tarjetas (imagen + título + autor)
     for title, n in tree.nodes.items():
-        label = f"{n.title}\n{n.author or ''}"
+        label = f"{n.title}{n.author or ''}"
 
-        # HTML para nodo (imagen + texto)
-        html = f"""
-        <div style='width:160px;text-align:center;'>
-            {'<img src="'+n.image_url+'" style="width:140px;height:auto;border-radius:4px;">' if n.image_url else ''}
-            <div style='font-weight:600;margin-top:4px;'>{n.title}</div>
-            <div style='font-size:12px;color:#555;'>{n.author or ''}</div>
-        </div>
-        """
+        if n.image_url:
+            net.add_node(
+                title,
+                label=label,
+                title=label,
+                shape="image",
+                image=n.image_url,
+                size=30,
+                font={"size": 14},
+                borderWidth=1
+            )
+        else:
+            net.add_node(
+                title,
+                label=label,
+                title=label,
+                shape="box",
+                margin=10,
+                font={"size": 14},
+                borderWidth=1
+            )
 
-        net.add_node(
-            title,
-            label=label,
-            title=label,
-            shape="box",
-            margin=10,
-            color="#ffffff",
-            font={"size": 14},
-            labelHighlightBold=False,
-            physics=True,
             html=html
-        )
 
     # Añadir relaciones
     for u, v in G.edges():
