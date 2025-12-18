@@ -162,9 +162,9 @@ else:
                 "enabled": True,
                 "direction": "UD",
                 "sortMethod": "directed",
-                "levelSeparation": 2200,
-                "nodeSpacing": 2600,
-                "treeSpacing": 3000,
+                "levelSeparation": 440,
+                "nodeSpacing": 520,
+                "treeSpacing": 600,
             }
         },
         "physics": {"enabled": False},
