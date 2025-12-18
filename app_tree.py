@@ -1,12 +1,20 @@
 """
 streamlit_app_pyvis.py
 
-App Streamlit con canvas explorable tipo Obsidian usando PyVis (vis.js).
-Árbol jerárquico de arriba hacia abajo.
-Nodos representados como tarjetas HTML: imagen arriba, título y autor debajo.
-El canvas ocupa toda la pantalla (100vh).
+VERSIÓN COMPATIBLE CON STREAMLIT CLOUD / WEB.
 
-Correcciones varias: inyección JS más robusta para que las tarjetas HTML se creen incluso si los nombres de variables de pyvis cambian.
+IMPORTANTE:
+Streamlit ejecuta el HTML de PyVis dentro de un iframe con sandbox.
+Esto IMPIDE overlays JS externos y manipulación directa del DOM.
+
+Solución robusta:
+Usar nodos HTML NATIVOS de vis.js (label con <img> + texto) sin overlays.
+Esto funciona en web, cloud y local.
+
+Resultado:
+Tarjeta real dentro del nodo (imagen arriba, título y autor debajo).
+Árbol jerárquico de arriba hacia abajo.
+Pantalla completa.
 """
 
 import json
@@ -148,7 +156,7 @@ with st.sidebar.form("add_form"):
 
 
 # =============================
-# CANVAS EXPLORABLE (PYVIS)
+# CANVAS (PYVIS COMPATIBLE WEB)
 # =============================
 st.subheader("Canvas de lecturas")
 
@@ -158,205 +166,55 @@ else:
     G = tree.to_graph()
 
     net = Network(
-        height="100%",
+        height="100vh",
         width="100%",
         directed=True,
         bgcolor="#ffffff",
         notebook=False,
     )
 
-    # Opciones jerárquicas (JSON válido)
     options = {
         "layout": {
             "hierarchical": {
                 "enabled": True,
                 "direction": "UD",
                 "sortMethod": "directed",
-                "levelSeparation": 150,
-                "nodeSpacing": 200,
+                "levelSeparation": 180,
+                "nodeSpacing": 220,
             }
         },
         "physics": {"enabled": False},
-        # ocultamos nodos por defecto (vamos a renderizar tarjetas HTML encima)
-        "nodes": {"shape": "dot", "size": 0, "font": {"color": "transparent"}},
     }
     net.set_options(json.dumps(options))
 
-    # Añadir nodos como elementos de datos (serán representados luego como tarjetas HTML)
+    # Nodos como tarjetas HTML NATIVAS (esto SÍ funciona en web)
     for title, n in tree.nodes.items():
-        label = f"{n.title}\n{n.author or ''}"
-        # guardamos image en la propiedad 'image' (pyvis/vis.js la reconoce)
+        html_label = f"""
+        <div style='width:160px; text-align:center;'>
+            {f"<img src='{n.image_url}' style='width:100%; border-radius:6px;'/>" if n.image_url else ""}
+            <div style='font-weight:600; font-size:14px; margin-top:6px;'>{n.title}</div>
+            <div style='font-size:12px; color:#555;'>{n.author or ''}</div>
+        </div>
+        """
+
         net.add_node(
             title,
-            label=label,
-            title=label,
-            image=n.image_url or "",
-            author=n.author or "",
-            shape="dot",
-            size=0,
+            label=html_label,
+            shape="box",
+            font={"multi": "html"},
+            margin=10,
         )
 
-    # Añadir aristas
+    # Aristas
     for u, v in G.edges():
         net.add_edge(u, v, arrows="to")
 
-    # Guardar HTML temporal
+    # Render
     html_file = "canvas.html"
     net.save_graph(html_file)
 
-    # Post-procesar el HTML para inyectar tarjetas HTML sobre el canvas y ajustar tamaño a pantalla completa
-    html = Path(html_file).read_text(encoding="utf-8")
-
-    inject = """
-
-    <style>
-    html, body, #mynetwork { height: 100vh; margin: 0; padding: 0; }
-    #mynetwork { position: relative; }
-    #card-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
-    .node-card { position: absolute; width: 160px; pointer-events: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); overflow: hidden; text-align: center; font-family: Arial, Helvetica, sans-serif; z-index: 60; }
-    .node-card img { width: 100%; height: auto; display: block; }
-    .node-card .card-title { font-weight: 600; padding: 6px 8px; font-size: 14px; }
-    .node-card .card-author { font-size: 12px; color: #555; padding-bottom: 8px; }
-    </style>
-
-    <script>
-    (function() {
-        function getContainer() {
-            return document.getElementById('mynetwork') || document.querySelector('.vis-network') || document.querySelector('div[id^="mynetwork"]');
-        }
-
-        function getNetworkObject() {
-            return window.network || (typeof network !== 'undefined' ? network : null);
-        }
-
-        function getNodesDataSet(net) {
-            if (window.nodes) return window.nodes;
-            if (typeof nodes !== 'undefined') return nodes;
-            try {
-                if (net && net.body && net.body.data && net.body.data.nodes) return net.body.data.nodes;
-            } catch(e) {}
-            return null;
-        }
-
-        function createCards() {
-            var container = getContainer();
-            var net = getNetworkObject();
-            var nodesDS = getNodesDataSet(net);
-            if (!container || !net || !nodesDS) {
-                // si falla, intentamos reintentar más tarde
-                setTimeout(createCards, 200);
-                return;
-            }
-
-            // crear overlay si no existe
-            var overlay = document.getElementById('card-overlay');
-            if (!overlay) {
-                overlay = document.createElement('div');
-                overlay.id = 'card-overlay';
-                container.appendChild(overlay);
-            }
-
-            // limpiar overlay
-            overlay.innerHTML = '';
-
-            var positions = net.getPositions();
-            var allNodes = nodesDS.get();
-
-            allNodes.forEach(function(nd) {
-                var id = nd.id;
-                var pos = positions[id];
-                if (!pos) return;
-
-                var domPos = net.canvasToDOM(pos);
-
-                var card = document.createElement('div');
-                card.className = 'node-card';
-                card.style.left = domPos.x + 'px';
-                card.style.top = domPos.y + 'px';
-                card.style.transform = 'translate(-50%, -50%)';
-
-                var imgHtml = nd.image ? ('<img src="' + nd.image + '" alt=""/>') : '';
-                var lines = (nd.label || '').split('\n');
-                var title = lines[0] || '';
-                var author = lines[1] || nd.author || '';
-
-                card.innerHTML = imgHtml + '<div class="card-title">' + title + '</div>' + '<div class="card-author">' + author + '</div>';
-
-                // arrastrar tarjeta: actualiza visualmente y luego mueve el nodo en la red
-                card.style.cursor = 'grab';
-                var dragging = false;
-                var startX = 0, startY = 0;
-
-                card.addEventListener('mousedown', function(e) {
-                    dragging = true;
-                    startX = e.clientX;
-                    startY = e.clientY;
-                    card.style.cursor = 'grabbing';
-                    e.preventDefault();
-                });
-
-                window.addEventListener('mousemove', function(e) {
-                    if (!dragging) return;
-                    var dx = e.clientX - startX;
-                    var dy = e.clientY - startY;
-                    startX = e.clientX;
-                    startY = e.clientY;
-                    var left = parseFloat(card.style.left || 0);
-                    var top = parseFloat(card.style.top || 0);
-                    card.style.left = (left + dx) + 'px';
-                    card.style.top = (top + dy) + 'px';
-                });
-
-                window.addEventListener('mouseup', function(e) {
-                    if (!dragging) return;
-                    dragging = false;
-                    card.style.cursor = 'grab';
-
-                    // al soltar, convertir posición DOM a canvas y mover el nodo
-                    var rect = container.getBoundingClientRect();
-                    var x = parseFloat(card.style.left) - rect.left;
-                    var y = parseFloat(card.style.top) - rect.top;
-                    var canvasPos = net.DOMtoCanvas({ x: x, y: y });
-
-                    try {
-                        net.moveNode(id, canvasPos.x, canvasPos.y);
-                    } catch(err) {
-                        console.warn('No se pudo mover el nodo:', err);
-                    }
-                });
-
-                overlay.appendChild(card);
-            });
-        }
-
-        // re-renderizar tarjetas en eventos importantes
-        function attachEvents() {
-            var net = getNetworkObject();
-            if (!net) { setTimeout(attachEvents, 200); return; }
-            net.on('stabilizationIterationsDone', function() { setTimeout(createCards, 80); });
-            net.on('afterDrawing', function() { setTimeout(createCards, 20); });
-            net.on('dragEnd', function() { setTimeout(createCards, 50); });
-            net.on('zoom', function() { setTimeout(createCards, 20); });
-            window.addEventListener('resize', function() { setTimeout(createCards, 200); });
-        }
-
-        if (document.readyState === 'complete') {
-            attachEvents();
-            setTimeout(createCards, 200);
-        } else {
-            window.addEventListener('load', function() { attachEvents(); setTimeout(createCards, 200); });
-        }
-    })();
-    </script>
-
-    </body>
-    """
-
-    # inyectar antes del cierre </body>
-    if '</body>' in html:
-        html = html.replace('</body>', inject)
-    else:
-        html = html + inject
-
-    # mostrar en streamlit ocupando toda la pantalla
-    components.html(html, height=900, scrolling=True)
+    components.html(
+        Path(html_file).read_text(encoding="utf-8"),
+        height=900,
+        scrolling=True,
+    )
