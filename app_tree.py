@@ -189,41 +189,37 @@ else:
 
     net.set_options(json.dumps(options))
 
-    # Añadir nodos: estilo tarjeta oscura tipo carta
+    # Añadir nodos: tarjetas sobrias (caja oscura + borde gris + texto dentro)
     for title, n in tree.nodes.items():
-        label_text = f"{n.title}{n.author or ''}"
+        label_text = f"{n.title}\n{n.author or ''}"
 
-        base_style = {
-            "font": {"size": 12, "color": "#EAEAEA"},
-            "borderWidth": 2,
-            "color": {
-                "border": "#6AA9FF",
+        net.add_node(
+            title,
+            label=label_text,
+            shape="box",
+            margin=14,
+            font={"size": 13, "color": "#EAEAEA"},
+            color={
                 "background": "#1E1E1E",
-                "highlight": {"border": "#9CC3FF", "background": "#2A2A2A"},
-                "hover": {"border": "#9CC3FF", "background": "#2A2A2A"},
+                "border": "#9A9A9A",
+                "highlight": {
+                    "background": "#2A2A2A",
+                    "border": "#C0C0C0",
+                },
+                "hover": {
+                    "background": "#2A2A2A",
+                    "border": "#C0C0C0",
+                },
             },
-            "shadow": {"enabled": True, "color": "rgba(0,0,0,0.6)", "size": 10, "x": 2, "y": 2},
-        }
-
-        if n.image_url:
-            # tarjeta con imagen + texto debajo (estilo carta)
-            net.add_node(
-                title,
-                label=label_text,
-                shape="image",
-                image=n.image_url,
-                size=65,
-                **base_style,
-            )
-        else:
-            # tarjeta sin imagen
-            net.add_node(
-                title,
-                label=label_text,
-                shape="box",
-                margin=12,
-                **base_style,
-            )
+            borderWidth=2,
+            shadow={
+                "enabled": True,
+                "color": "rgba(0,0,0,0.6)",
+                "size": 10,
+                "x": 2,
+                "y": 2,
+            },
+        )
 
     # Aristas
     for u, v in G.edges():
