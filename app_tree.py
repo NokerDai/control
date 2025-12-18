@@ -1,18 +1,3 @@
-"""
-streamlit_app_pyvis.py
-
-Versión corregida y estable para Streamlit (local y Cloud).
-
-- Evita usar HTML dentro de `label` (vis.js dibuja sobre canvas y no interpreta HTML allí).
-- Usa `shape='image'` para nodos con imagen y label de texto en dos líneas (título + autor).
-- Evita parámetros no soportados que podían desencadenar errores tipo "NoneType is not callable".
-- Ajustes de layout y estilos para legibilidad.
-
-Ejecutar:
-    pip install streamlit pyvis networkx
-    streamlit run streamlit_app_pyvis.py
-"""
-
 import json
 from pathlib import Path
 import uuid
@@ -25,7 +10,7 @@ import streamlit.components.v1 as components
 
 
 # -----------------------------
-# Modelo de datos
+# Modelo de datos (Sin cambios)
 # -----------------------------
 class Node:
     def __init__(
@@ -189,31 +174,47 @@ else:
 
     net.set_options(json.dumps(options))
 
-    # Añadir nodos: tarjetas sobrias (caja oscura + borde gris + texto dentro)
+    # =========================================================================
+    # CORRECCIÓN AQUÍ: Lógica dinámica para shapes (Imagen vs Caja)
+    # =========================================================================
     for title, n in tree.nodes.items():
-        label_text = f"{n.title}{n.author or ''}"
+        # Formateo mejorado del texto (con salto de línea si hay autor)
+        if n.author:
+            label_text = f"{n.title}\n({n.author})"
+        else:
+            label_text = n.title
+        
+        # Determinar si tiene imagen válida
+        has_image = n.image_url and len(n.image_url.strip()) > 0
+        
+        # Si tiene imagen usamos 'circularImage' (o 'image'), si no 'box'
+        # 'circularImage' suele quedar mejor estéticamente para nodos mixtos.
+        # Si prefieres rectangular usa 'image'.
+        node_shape = "circularImage" if has_image else "box"
 
         net.add_node(
             title,
             label=label_text,
-            shape="box",
+            shape=node_shape, 
             margin=14,
-            font={"size": 13, "color": "#EAEAEA"},
-            image=n.image_url if n.image_url else None,
-            imagePadding=10,
+            font={"size": 14, "color": "#EAEAEA", "face": "arial"},
+            # Propiedad image solo funciona si shape es 'image' o 'circularImage'
+            image=n.image_url if has_image else None,
+            
+            # Colores
             color={
-                "background": "#1E1E1E",
+                "background": "#1E1E1E",  # Color de la caja (si es box) o fondo tras imagen
                 "border": "#9A9A9A",
                 "highlight": {
                     "background": "#2A2A2A",
-                    "border": "#C0C0C0",
+                    "border": "#FFFFFF",
                 },
                 "hover": {
                     "background": "#2A2A2A",
-                    "border": "#C0C0C0",
+                    "border": "#FFFFFF",
                 },
             },
-            borderWidth=2,
+            borderWidth=3,
             shadow={
                 "enabled": True,
                 "color": "rgba(0,0,0,0.6)",
@@ -232,5 +233,4 @@ else:
     net.save_graph(html_file)
     html = Path(html_file).read_text(encoding="utf-8")
 
-    # Si quieres forzar pantalla completa en el iframe, puedes ajustar height en components.html
     components.html(html, height=900, scrolling=True)
