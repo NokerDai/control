@@ -187,23 +187,30 @@ else:
     }
     net.set_options(json.dumps(options))
 
-    # Nodos como tarjetas HTML NATIVAS (esto SÍ funciona en web)
+    # Nodos como tarjeta: imagen arriba + label abajo
     for title, n in tree.nodes.items():
-        html_label = f"""
-        <div style='width:160px; text-align:center;'>
-            {f"<img src='{n.image_url}' style='width:100%; border-radius:6px;'/>" if n.image_url else ""}
-            <div style='font-weight:600; font-size:14px; margin-top:6px;'>{n.title}</div>
-            <div style='font-size:12px; color:#555;'>{n.author or ''}</div>
-        </div>
-        """
+        # label como texto plano (dos líneas: título y autor)
+        label_text = f"{n.title}\n{n.author or ''}"
 
-        net.add_node(
-            title,
-            label=html_label,
-            shape="box",
-            font={"multi": "html"},
-            margin=10,
-        )
+        if n.image_url:
+            # nodo con imagen; label se mostrará DEBAJO de la imagen en vis.js
+            net.add_node(
+                title,
+                label=label_text,
+                shape="image",
+                image=n.image_url,
+                size=60,
+                font={"size": 12},
+            )
+        else:
+            # nodo caja con texto dentro
+            net.add_node(
+                title,
+                label=label_text,
+                shape="box",
+                margin=10,
+                font={"size": 12},
+            )
 
     # Aristas
     for u, v in G.edges():
