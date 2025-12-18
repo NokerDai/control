@@ -2,7 +2,8 @@ import json
 from pathlib import Path
 import uuid
 from typing import Dict, List, Optional
-import base64 # Necesario para el truco del SVG
+import base64
+import requests  # <-- NUEVA IMPORTACIÓN NECESARIA
 
 import streamlit as st
 from pyvis.network import Network
@@ -89,12 +90,13 @@ class ReadingTree:
 
 
 # -----------------------------
-# Funciones Auxiliares (NUEVO)
+# Funciones Auxiliares (MODIFICADA PARA CARGAR IMÁGENES)
 # -----------------------------
 def create_card_svg(title: str, author: Optional[str], image_url: Optional[str]) -> str:
     """
-    Genera un SVG dinámico que parece una carta coleccionable.
-    Incrusta la imagen (si existe) y el texto dentro de un rectángulo.
+    Genera un SVG dinámico estilo carta.
+    Descarga la imagen externa y la incrusta en base64 dentro del SVG para evitar
+    problemas de CORS en el navegador.
     """
     # Dimensiones de la carta
     card_width = 220
@@ -108,12 +110,29 @@ def create_card_svg(title: str, author: Optional[str], image_url: Optional[str])
     
     # Colores estilo carta
     bg_color = "#2A2A2A"
-    border_color = "#D4AF37" # Un dorado para el borde estilo carta rara
+    border_color = "#D4AF37"
     text_color_title = "#FFFFFF"
     text_color_author = "#CCCCCC"
     placeholder_color = "#141414"
 
-    # Construcción del SVG
+    # --- Lógica de descarga e incrustación de imagen ---
+    final_image_href = None
+    if image_url and image_url.strip():
+        try:
+            # Intentamos descargar la imagen con un timeout corto
+            response = requests.get(image_url, timeout=5)
+            if response.status_code == 200:
+                # Obtenemos el tipo de contenido (ej: image/jpeg)
+                content_type = response.headers.get('content-type', 'image/jpeg')
+                # Convertimos los bytes de la imagen a base64
+                img_b64 = base64.b64encode(response.content).decode('utf-8')
+                # Creamos el Data URI completo para incrustar
+                final_image_href = f"data:{content_type};base64,{img_b64}"
+        except Exception:
+            # Si falla la descarga, lo dejamos como None y se usará el placeholder
+            final_image_href = None
+
+    # --- Construcción del SVG ---
     svg_content = f'''
     <svg xmlns="http://www.w3.org/2000/svg" width="{card_width}" height="{card_height}">
       <defs>
@@ -127,20 +146,19 @@ def create_card_svg(title: str, author: Optional[str], image_url: Optional[str])
       <rect x="{padding}" y="{padding}" width="{card_width - padding*2}" height="{image_height}" rx="8" ry="8" fill="{placeholder_color}"/>
     '''
 
-    # Área de Imagen
-    if image_url and image_url.strip():
-        # Usamos preserveAspectRatio="xMidYMid slice" para que actúe como object-fit: cover
+    # Área de Imagen: Usamos el Data URI generado si existe
+    if final_image_href:
         svg_content += f'''
-        <image href="{image_url}" x="{padding}" y="{padding}" width="{card_width - padding*2}" height="{image_height}" 
+        <image href="{final_image_href}" x="{padding}" y="{padding}" width="{card_width - padding*2}" height="{image_height}" 
                preserveAspectRatio="xMidYMid slice" clip-path="url(#rounded-corners)"/>
         '''
     else:
-        # Placeholder si no hay URL
+        # Placeholder texto si no hay imagen válida
         svg_content += f'''
          <text x="{card_width/2}" y="{image_height/2 + padding}" text-anchor="middle" fill="#555555" font-family="Arial" font-size="14">Sin imagen</text>
         '''
 
-    # Área de Texto (Título y Autor debajo de la imagen)
+    # Área de Texto
     text_start_y = image_height + padding + 30
     svg_content += f'''
       <text x="{card_width/2}" y="{text_start_y}" text-anchor="middle" fill="{text_color_title}" 
@@ -151,13 +169,13 @@ def create_card_svg(title: str, author: Optional[str], image_url: Optional[str])
     </svg>
     '''
     
-    # Codificar el SVG a base64 para usarlo como Data URI
+    # Codificar el SVG final a base64 para usarlo como Data URI en PyVis
     encoded_svg = base64.b64encode(svg_content.encode('utf-8')).decode('utf-8')
     return f"data:image/svg+xml;base64,{encoded_svg}"
 
 
 # -----------------------------
-# Streamlit setup
+# Streamlit setup (Sin cambios)
 # -----------------------------
 st.set_page_config(page_title="Árbol de lecturas (Canvas)", layout="wide")
 st.title("Árbol de lecturas – Canvas estilo Cartas")
@@ -174,7 +192,7 @@ tree: ReadingTree = st.session_state.tree
 
 
 # -----------------------------
-# Sidebar: añadir obras
+# Sidebar: añadir obras (Sin cambios)
 # -----------------------------
 st.sidebar.header("Añadir obra")
 
@@ -199,7 +217,7 @@ with st.sidebar.form("add_form"):
 
 
 # -----------------------------
-# Canvas interactivo (PyVis)
+# Canvas interactivo (PyVis) (Sin cambios)
 # -----------------------------
 st.subheader("Canvas de lecturas")
 
@@ -209,10 +227,10 @@ else:
     G = tree.to_graph()
 
     net = Network(
-        height="90vh", # Un poco menos para ajustar
+        height="90vh",
         width="100%",
         directed=True,
-        bgcolor="#0E0E11", # Fondo muy oscuro para que resalten las cartas
+        bgcolor="#0E0E11",
         notebook=False,
     )
 
@@ -222,7 +240,6 @@ else:
                 "enabled": True,
                 "direction": "UD",
                 "sortMethod": "directed",
-                # Aumentamos la separación porque las cartas son grandes
                 "levelSeparation": 350, 
                 "nodeSpacing": 250,
                 "treeSpacing": 300,
@@ -232,7 +249,6 @@ else:
         "interaction": {
             "hover": True, 
             "zoomView": True,
-             # Importante para poder mover cartas grandes fácilmente
             "dragNodes": True
         },
         "edges": {
@@ -241,7 +257,7 @@ else:
             },
             "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.5},
             "width": 3,
-            "color": {"color": "#D4AF37", "opacity": 0.6}, # Conectores dorados
+            "color": {"color": "#D4AF37", "opacity": 0.6},
             "shadow": {"enabled": True, "color": "black", "size": 5, "x": 2, "y": 2}
         },
         "configure": {"enabled": False}
@@ -250,25 +266,17 @@ else:
     net.set_options(json.dumps(options))
 
     # =========================================================================
-    # BUCLE PRINCIPAL: Usando el generador de SVG
+    # BUCLE PRINCIPAL
     # =========================================================================
     for title_key, n in tree.nodes.items():
-        # 1. Generamos la imagen SVG para este nodo
+        # Generamos la imagen SVG (ahora con la imagen incrustada)
         svg_card_uri = create_card_svg(n.title, n.author, n.image_url)
 
         net.add_node(
             title_key,
-            # IMPORTANTE: No ponemos 'label'. El texto ya está dentro del SVG.
-            # label=... (eliminado)
-            
-            # Usamos 'image' para que renderice el SVG que hemos creado
             shape="image",
             image=svg_card_uri,
-            
-            # Tamaño de la imagen en el canvas (debe coincidir aprox con el viewBox del SVG)
-            size=110, # La mitad del width del SVG (220/2) suele funcionar bien como escala base
-            
-            # Sombra general para dar profundidad a la carta
+            size=110,
             shadow={
                 "enabled": True,
                 "color": "rgba(0,0,0,0.8)",
@@ -276,10 +284,10 @@ else:
                 "x": 5,
                 "y": 5,
             },
-            borderWidth=0, # El borde ya está en el SVG
+            borderWidth=0,
             shapeProperties={
-                "useImageSize": False, # Usar el tamaño definido por 'size'
-                "interpolation": True # Mejor calidad al hacer zoom
+                "useImageSize": False,
+                "interpolation": True
             }
         )
 
@@ -292,5 +300,4 @@ else:
     net.save_graph(html_file)
     html_content = Path(html_file).read_text(encoding="utf-8")
 
-    # Ajuste de altura para ver bien las cartas grandes
     components.html(html_content, height=1000, scrolling=True)
