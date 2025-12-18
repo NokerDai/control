@@ -179,18 +179,33 @@ else:
                 "enabled": True,
                 "direction": "UD",
                 "sortMethod": "directed",
-                "levelSeparation": 180,
-                "nodeSpacing": 220,
+                "levelSeparation": 220,
+                "nodeSpacing": 260,
+                "treeSpacing": 300,
             }
         },
         "physics": {"enabled": False},
+        "edges": {
+            "arrows": {
+                "to": {
+                    "enabled": True,
+                    "scaleFactor": 1.2
+                }
+            },
+            "smooth": {
+                "type": "cubicBezier",
+                "forceDirection": "vertical",
+                "roundness": 0.4
+            },
+            "width": 1.6
+        }
     }
-    net.set_options(json.dumps(options))
+    net.set_options(json.dumps(options))(json.dumps(options))
 
     # Nodos como tarjeta: imagen arriba + label abajo
     for title, n in tree.nodes.items():
         # label como texto plano (dos líneas: título y autor)
-        label_text = f"{n.title}\n{n.author or ''}"
+        label_text = f"{n.title}{n.author or ''}"
 
         if n.image_url:
             # nodo con imagen; label se mostrará DEBAJO de la imagen en vis.js
