@@ -1,4 +1,3 @@
 streamlit
 pyvis
 networkx
-base64
