@@ -1,20 +1,16 @@
 """
 streamlit_app_pyvis.py
 
-VERSIÓN COMPATIBLE CON STREAMLIT CLOUD / WEB.
+Versión corregida y estable para Streamlit (local y Cloud).
 
-IMPORTANTE:
-Streamlit ejecuta el HTML de PyVis dentro de un iframe con sandbox.
-Esto IMPIDE overlays JS externos y manipulación directa del DOM.
+- Evita usar HTML dentro de `label` (vis.js dibuja sobre canvas y no interpreta HTML allí).
+- Usa `shape='image'` para nodos con imagen y label de texto en dos líneas (título + autor).
+- Evita parámetros no soportados que podían desencadenar errores tipo "NoneType is not callable".
+- Ajustes de layout y estilos para legibilidad.
 
-Solución robusta:
-Usar nodos HTML NATIVOS de vis.js (label con <img> + texto) sin overlays.
-Esto funciona en web, cloud y local.
-
-Resultado:
-Tarjeta real dentro del nodo (imagen arriba, título y autor debajo).
-Árbol jerárquico de arriba hacia abajo.
-Pantalla completa.
+Ejecutar:
+    pip install streamlit pyvis networkx
+    streamlit run streamlit_app_pyvis.py
 """
 
 import json
@@ -28,9 +24,9 @@ import networkx as nx
 import streamlit.components.v1 as components
 
 
-# =============================
-# MODELO DE DATOS
-# =============================
+# -----------------------------
+# Modelo de datos
+# -----------------------------
 class Node:
     def __init__(
         self,
@@ -93,9 +89,7 @@ class ReadingTree:
 
     def save(self, path: str):
         data = [n.to_dict() for n in self.nodes.values()]
-        Path(path).write_text(
-            json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        Path(path).write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
 
     def load(self, path: str):
         p = Path(path)
@@ -108,9 +102,9 @@ class ReadingTree:
             self.nodes[n.title] = n
 
 
-# =============================
-# STREAMLIT SETUP
-# =============================
+# -----------------------------
+# Streamlit setup
+# -----------------------------
 st.set_page_config(page_title="Árbol de lecturas (Canvas)", layout="wide")
 st.title("Árbol de lecturas – Canvas explorable")
 
@@ -125,9 +119,9 @@ if "tree" not in st.session_state:
 tree: ReadingTree = st.session_state.tree
 
 
-# =============================
-# SIDEBAR – AÑADIR OBRAS
-# =============================
+# -----------------------------
+# Sidebar: añadir obras
+# -----------------------------
 st.sidebar.header("Añadir obra")
 
 with st.sidebar.form("add_form"):
@@ -142,12 +136,7 @@ with st.sidebar.form("add_form"):
             st.sidebar.error("El título es obligatorio")
         else:
             try:
-                tree.add_node(
-                    title=title,
-                    author=author or None,
-                    image_url=image_url or None,
-                    antes=antes,
-                )
+                tree.add_node(title=title, author=author or None, image_url=image_url or None, antes=antes)
                 tree.save(DATA_FILE)
                 st.sidebar.success("Obra añadida")
                 st.rerun()
@@ -155,9 +144,9 @@ with st.sidebar.form("add_form"):
                 st.sidebar.error(str(e))
 
 
-# =============================
-# CANVAS (PYVIS COMPATIBLE WEB)
-# =============================
+# -----------------------------
+# Canvas interactivo (PyVis)
+# -----------------------------
 st.subheader("Canvas de lecturas")
 
 if not tree.nodes:
@@ -165,13 +154,7 @@ if not tree.nodes:
 else:
     G = tree.to_graph()
 
-    net = Network(
-        height="100vh",
-        width="100%",
-        directed=True,
-        bgcolor="#ffffff",
-        notebook=False,
-    )
+    net = Network(height="100vh", width="100%", directed=True, bgcolor="#ffffff", notebook=False)
 
     options = {
         "layout": {
@@ -187,56 +170,35 @@ else:
         "physics": {"enabled": False},
         "edges": {
             "arrows": {
-                "to": {
-                    "enabled": True,
-                    "scaleFactor": 1.2
-                }
+                "to": {"enabled": True, "scaleFactor": 1.3}
             },
-            "smooth": {
-                "type": "cubicBezier",
-                "forceDirection": "vertical",
-                "roundness": 0.4
-            },
-            "width": 1.6
+            "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4},
+            "width": 1.6,
         }
     }
-    net.set_options(json.dumps(options))(json.dumps(options))
 
-    # Nodos como tarjeta: imagen arriba + label abajo
+    net.set_options(json.dumps(options))
+
+    # Añadir nodos: imagen como nodo (shape='image') y label con texto plano (dos líneas)
     for title, n in tree.nodes.items():
-        # label como texto plano (dos líneas: título y autor)
-        label_text = f"{n.title}{n.author or ''}"
-
+        label_text = f"{n.title}\n{n.author or ''}"
         if n.image_url:
-            # nodo con imagen; label se mostrará DEBAJO de la imagen en vis.js
-            net.add_node(
-                title,
-                label=label_text,
-                shape="image",
-                image=n.image_url,
-                size=60,
-                font={"size": 12},
-            )
+            try:
+                net.add_node(title, label=label_text, shape="image", image=n.image_url, size=60, font={"size": 12})
+            except Exception:
+                # si la URL falla por cualquier motivo, caer a caja de texto
+                net.add_node(title, label=label_text, shape="box", margin=10, font={"size": 12})
         else:
-            # nodo caja con texto dentro
-            net.add_node(
-                title,
-                label=label_text,
-                shape="box",
-                margin=10,
-                font={"size": 12},
-            )
+            net.add_node(title, label=label_text, shape="box", margin=10, font={"size": 12})
 
     # Aristas
     for u, v in G.edges():
         net.add_edge(u, v, arrows="to")
 
-    # Render
+    # Guardar y renderizar
     html_file = "canvas.html"
     net.save_graph(html_file)
+    html = Path(html_file).read_text(encoding="utf-8")
 
-    components.html(
-        Path(html_file).read_text(encoding="utf-8"),
-        height=900,
-        scrolling=True,
-    )
+    # Si quieres forzar pantalla completa en el iframe, puedes ajustar height en components.html
+    components.html(html, height=900, scrolling=True)
