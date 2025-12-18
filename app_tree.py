@@ -168,20 +168,24 @@ else:
             }
         },
         "physics": {"enabled": False},
+        "interaction": {"hover": True},
         "edges": {
             "arrows": {
                 "to": {"enabled": True, "scaleFactor": 1.3}
             },
             "smooth": {"type": "cubicBezier", "forceDirection": "vertical", "roundness": 0.4},
             "width": 1.6,
-        }
+            "color": {"color": "#BBBBBB"}
+        },
+        "configure": {"enabled": False}
     }
 
     net.set_options(json.dumps(options))
 
     # Añadir nodos: estilo tarjeta oscura tipo carta
     for title, n in tree.nodes.items():
-        label_text = f"{n.title}\n{n.author or ''}"
+        label_text = f"{n.title}
+{n.author or ''}"
 
         base_style = {
             "font": {"size": 12, "color": "#EAEAEA"},
