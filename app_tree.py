@@ -164,9 +164,63 @@ st.subheader("Mapa de lecturas")
 
 if tree.nodes:
     G = tree.to_graph()
-    fig = plt.figure(figsize=(10, 6))
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_size=2000, font_size=9)
+    pos = nx.spring_layout(G, seed=42)
+
+    fig, ax = plt.subplots(figsize=(12, 8))
+    ax.axis('off')
+
+    # Dibujar flechas (conexiones)
+    for u, v in G.edges():
+        x1, y1 = pos[u]
+        x2, y2 = pos[v]
+        ax.annotate(
+            '',
+            xy=(x2, y2),
+            xytext=(x1, y1),
+            arrowprops=dict(arrowstyle='->', lw=1)
+        )
+
+    # Dibujar nodos como rectángulos Imagen / Título / Autor
+    for title, (x, y) in pos.items():
+        n = tree.nodes[title]
+
+        width = 0.25
+        height = 0.18
+
+        # Rectángulo
+        rect = plt.Rectangle(
+            (x - width / 2, y - height / 2),
+            width,
+            height,
+            fill=True,
+            edgecolor='black',
+            facecolor='white',
+            linewidth=1
+        )
+        ax.add_patch(rect)
+
+        # Imagen (si existe)
+        if n.image_url:
+            try:
+                img = plt.imread(n.image_url)
+                ax.imshow(
+                    img,
+                    extent=(
+                        x - width / 2 + 0.01,
+                        x + width / 2 - 0.01,
+                        y + height / 2 - 0.01,
+                        y + 0.02
+                    ),
+                    aspect='auto'
+                )
+            except Exception:
+                pass
+
+        # Texto: título y autor
+        ax.text(x, y - 0.02, n.title, ha='center', va='center', fontsize=9, weight='bold', wrap=True)
+        if n.author:
+            ax.text(x, y - 0.07, n.author, ha='center', va='center', fontsize=8)
+
     st.pyplot(fig)
 else:
     st.info("Aún no hay obras cargadas")
