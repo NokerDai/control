@@ -154,7 +154,14 @@ if not tree.nodes:
 else:
     G = tree.to_graph()
 
-    net = Network(height="100vh", width="100%", directed=True, bgcolor="#ffffff", notebook=False)
+    net = Network(
+        height="100vh",
+        width="100%",
+        directed=True,
+        bgcolor="#0E0E11",
+        font_color="#EAEAEA",
+        notebook=False,
+    )
 
     options = {
         "layout": {
