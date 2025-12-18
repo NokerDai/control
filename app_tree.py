@@ -184,8 +184,7 @@ else:
 
     # Añadir nodos: estilo tarjeta oscura tipo carta
     for title, n in tree.nodes.items():
-        label_text = f"{n.title}
-{n.author or ''}"
+        label_text = f"{n.title}{n.author or ''}"
 
         base_style = {
             "font": {"size": 12, "color": "#EAEAEA"},
