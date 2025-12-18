@@ -137,27 +137,25 @@ if tree.nodes:
     net = Network(height="750px", width="100%", directed=True, bgcolor="#ffffff")
     
     # Layout jerárquico: raíces arriba, descendientes abajo
-    net.set_options("""
-    var options = {
-      layout: {
-        hierarchical: {
-          enabled: true,
-          direction: 'UD',
-          sortMethod: 'directed',
-          levelSeparation: 150,
-          nodeSpacing: 200
-        }
-      },
-      physics: {
-        enabled: false
-      }
+    options = {
+        "layout": {
+            "hierarchical": {
+                "enabled": True,
+                "direction": "UD",
+                "sortMethod": "directed",
+                "levelSeparation": 150,
+                "nodeSpacing": 200
+            }
+        },
+        "physics": {"enabled": False}
     }
-    """)
+    net.set_options(json.dumps(options))
     net.barnes_hut()
 
     # Añadir nodos como tarjetas (imagen + título + autor)
     for title, n in tree.nodes.items():
-        label = f"{n.title}{n.author or ''}"
+        label = f"{n.title}
+{n.author or ''}"
 
         if n.image_url:
             net.add_node(
@@ -182,6 +180,7 @@ if tree.nodes:
             )
 
             html=html
+        )
 
     # Añadir relaciones
     for u, v in G.edges():
