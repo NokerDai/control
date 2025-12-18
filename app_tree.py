@@ -191,7 +191,7 @@ else:
 
     # Añadir nodos: tarjetas sobrias (caja oscura + borde gris + texto dentro)
     for title, n in tree.nodes.items():
-        label_text = f"{n.title}\n{n.author or ''}"
+        label_text = f"{n.title}{n.author or ''}"
 
         net.add_node(
             title,
@@ -199,6 +199,8 @@ else:
             shape="box",
             margin=14,
             font={"size": 13, "color": "#EAEAEA"},
+            image=n.image_url if n.image_url else None,
+            imagePadding=10,
             color={
                 "background": "#1E1E1E",
                 "border": "#9A9A9A",
