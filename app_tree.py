@@ -1,24 +1,24 @@
 """
-streamlit_app.py
+streamlit_app_pyvis.py
 
-App web en Streamlit para gestionar y visualizar un árbol de lecturas filosóficas.
-Usa el mismo modelo de datos que reading_tree.py (título, autor, image_url, antes).
+App Streamlit con canvas explorable tipo Obsidian usando PyVis (vis.js).
+Nodos como tarjetas: Imagen / Título / Autor.
+Zoom, drag y exploración libre.
 
-Ejecutar con:
-    streamlit run streamlit_app.py
-
-Dependencias:
-    pip install streamlit networkx matplotlib
+Ejecutar:
+    pip install streamlit pyvis networkx
+    streamlit run streamlit_app_pyvis.py
 """
 
 import json
 from pathlib import Path
 import uuid
-from typing import List, Optional, Dict
+from typing import Dict, List, Optional
 
 import streamlit as st
+from pyvis.network import Network
 import networkx as nx
-import matplotlib.pyplot as plt
+import streamlit.components.v1 as components
 
 
 # -----------------------------
@@ -32,7 +32,7 @@ class Node:
         self.image_url = image_url
         self.antes = antes or []
 
-    def to_dict(self) -> Dict:
+    def to_dict(self):
         return {
             "id": self.id,
             "title": self.title,
@@ -58,7 +58,7 @@ class ReadingTree:
 
     def add_node(self, title, author=None, image_url=None, antes=None):
         if title in self.nodes:
-            raise ValueError("Ya existe un título con ese nombre")
+            raise ValueError("Ya existe ese título")
         self.nodes[title] = Node(title, author, image_url, antes or [])
 
     def to_graph(self) -> nx.DiGraph:
@@ -86,10 +86,10 @@ class ReadingTree:
 
 
 # -----------------------------
-# CONFIG STREAMLIT
+# STREAMLIT SETUP
 # -----------------------------
-st.set_page_config(page_title="Árbol de lecturas", layout="wide")
-st.title("Árbol de lecturas filosóficas")
+st.set_page_config(page_title="Árbol de lecturas (Canvas)", layout="wide")
+st.title("Árbol de lecturas – Canvas explorable")
 
 DATA_FILE = "reading_tree.json"
 
@@ -98,12 +98,11 @@ if "tree" not in st.session_state:
     tree.load(DATA_FILE)
     st.session_state.tree = tree
 
-
 tree: ReadingTree = st.session_state.tree
 
 
 # -----------------------------
-# SIDEBAR: AÑADIR ENTRADAS
+# SIDEBAR – AÑADIR OBRAS
 # -----------------------------
 st.sidebar.header("Añadir obra")
 
@@ -128,99 +127,52 @@ with st.sidebar.form("add_form"):
 
 
 # -----------------------------
-# COLUMNA IZQUIERDA: LISTA
+# CANVAS EXPLORABLE (PYVIS)
 # -----------------------------
-col1, col2 = st.columns([1, 2])
-
-with col1:
-    st.subheader("Obras")
-    selected = st.selectbox("Seleccionar", options=["—"] + sorted(tree.nodes.keys()))
-
-
-# -----------------------------
-# COLUMNA DERECHA: DETALLE
-# -----------------------------
-with col2:
-    if selected and selected != "—":
-        n = tree.nodes[selected]
-        st.subheader(n.title)
-        if n.author:
-            st.markdown(f"**Autor:** {n.author}")
-        if n.image_url:
-            st.image(n.image_url, use_container_width=True)
-        if n.antes:
-            st.markdown("**Leer antes:**")
-            for a in n.antes:
-                st.markdown(f"- {a}")
-    else:
-        st.info("Selecciona una obra para ver detalles")
-
-
-# -----------------------------
-# VISUALIZACIÓN DEL GRAFO
-# -----------------------------
-st.divider()
-st.subheader("Mapa de lecturas")
+st.subheader("Canvas de lecturas")
 
 if tree.nodes:
     G = tree.to_graph()
-    pos = nx.spring_layout(G, seed=42)
 
-    fig, ax = plt.subplots(figsize=(12, 8))
-    ax.axis('off')
+    net = Network(height="750px", width="100%", directed=True, bgcolor="#ffffff")
+    net.barnes_hut()
 
-    # Dibujar flechas (conexiones)
+    # Añadir nodos como tarjetas
+    for title, n in tree.nodes.items():
+        label = f"{n.title}\n{n.author or ''}"
+
+        # HTML para nodo (imagen + texto)
+        html = f"""
+        <div style='width:160px;text-align:center;'>
+            {'<img src="'+n.image_url+'" style="width:140px;height:auto;border-radius:4px;">' if n.image_url else ''}
+            <div style='font-weight:600;margin-top:4px;'>{n.title}</div>
+            <div style='font-size:12px;color:#555;'>{n.author or ''}</div>
+        </div>
+        """
+
+        net.add_node(
+            title,
+            label=label,
+            title=label,
+            shape="box",
+            margin=10,
+            color="#ffffff",
+            font={"size": 14},
+            labelHighlightBold=False,
+            physics=True,
+            html=html
+        )
+
+    # Añadir relaciones
     for u, v in G.edges():
-        x1, y1 = pos[u]
-        x2, y2 = pos[v]
-        ax.annotate(
-            '',
-            xy=(x2, y2),
-            xytext=(x1, y1),
-            arrowprops=dict(arrowstyle='->', lw=1)
-        )
+        net.add_edge(u, v, arrows="to")
 
-    # Dibujar nodos como rectángulos Imagen / Título / Autor
-    for title, (x, y) in pos.items():
-        n = tree.nodes[title]
+    # Guardar HTML temporal
+    html_file = "canvas.html"
+    net.save_graph(html_file)
 
-        width = 0.25
-        height = 0.18
+    # Mostrar en Streamlit
+    components.html(Path(html_file).read_text(encoding="utf-8"), height=800, scrolling=True)
 
-        # Rectángulo
-        rect = plt.Rectangle(
-            (x - width / 2, y - height / 2),
-            width,
-            height,
-            fill=True,
-            edgecolor='black',
-            facecolor='white',
-            linewidth=1
-        )
-        ax.add_patch(rect)
-
-        # Imagen (si existe)
-        if n.image_url:
-            try:
-                img = plt.imread(n.image_url)
-                ax.imshow(
-                    img,
-                    extent=(
-                        x - width / 2 + 0.01,
-                        x + width / 2 - 0.01,
-                        y + height / 2 - 0.01,
-                        y + 0.02
-                    ),
-                    aspect='auto'
-                )
-            except Exception:
-                pass
-
-        # Texto: título y autor
-        ax.text(x, y - 0.02, n.title, ha='center', va='center', fontsize=9, weight='bold', wrap=True)
-        if n.author:
-            ax.text(x, y - 0.07, n.author, ha='center', va='center', fontsize=8)
-
-    st.pyplot(fig)
 else:
     st.info("Aún no hay obras cargadas")
