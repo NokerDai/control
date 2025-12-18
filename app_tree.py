@@ -5,6 +5,8 @@ App Streamlit con canvas explorable tipo Obsidian usando PyVis (vis.js).
 Árbol jerárquico de arriba hacia abajo.
 Nodos representados como tarjetas HTML: imagen arriba, título y autor debajo.
 El canvas ocupa toda la pantalla (100vh).
+
+Correcciones varias: inyección JS más robusta para que las tarjetas HTML se creen incluso si los nombres de variables de pyvis cambian.
 """
 
 import json
@@ -175,15 +177,15 @@ else:
             }
         },
         "physics": {"enabled": False},
-        # ocultamos los nodos por defecto (vamos a renderizar tarjetas HTML encima)
+        # ocultamos nodos por defecto (vamos a renderizar tarjetas HTML encima)
         "nodes": {"shape": "dot", "size": 0, "font": {"color": "transparent"}},
     }
     net.set_options(json.dumps(options))
 
     # Añadir nodos como elementos de datos (serán representados luego como tarjetas HTML)
     for title, n in tree.nodes.items():
-        # almacenamos label, author e imagen en las propiedades del nodo
         label = f"{n.title}\n{n.author or ''}"
+        # guardamos image en la propiedad 'image' (pyvis/vis.js la reconoce)
         net.add_node(
             title,
             label=label,
@@ -210,111 +212,141 @@ else:
     <style>
     html, body, #mynetwork { height: 100vh; margin: 0; padding: 0; }
     #mynetwork { position: relative; }
-    #card-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-    .node-card { position: absolute; width: 160px; pointer-events: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); overflow: hidden; text-align: center; font-family: Arial, Helvetica, sans-serif; }
+    #card-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 50; }
+    .node-card { position: absolute; width: 160px; pointer-events: auto; background: #fff; border-radius: 8px; box-shadow: 0 4px 12px rgba(0,0,0,0.12); overflow: hidden; text-align: center; font-family: Arial, Helvetica, sans-serif; z-index: 60; }
     .node-card img { width: 100%; height: auto; display: block; }
     .node-card .card-title { font-weight: 600; padding: 6px 8px; font-size: 14px; }
     .node-card .card-author { font-size: 12px; color: #555; padding-bottom: 8px; }
     </style>
 
     <script>
-    // función que crea las tarjetas y las posiciona según la posición del nodo en el canvas
-    function createCards() {
-        const container = document.getElementById('mynetwork');
-        if (!container) return;
-
-        // crear overlay si no existe
-        let overlay = document.getElementById('card-overlay');
-        if (!overlay) {
-            overlay = document.createElement('div');
-            overlay.id = 'card-overlay';
-            container.appendChild(overlay);
+    (function() {
+        function getContainer() {
+            return document.getElementById('mynetwork') || document.querySelector('.vis-network') || document.querySelector('div[id^="mynetwork"]');
         }
 
-        // limpiar overlay
-        overlay.innerHTML = '';
+        function getNetworkObject() {
+            return window.network || (typeof network !== 'undefined' ? network : null);
+        }
 
-        // obtener posiciones de nodos en coordenadas de canvas
-        const positions = network.getPositions();
+        function getNodesDataSet(net) {
+            if (window.nodes) return window.nodes;
+            if (typeof nodes !== 'undefined') return nodes;
+            try {
+                if (net && net.body && net.body.data && net.body.data.nodes) return net.body.data.nodes;
+            } catch(e) {}
+            return null;
+        }
 
-        // nodes es la DataSet de vis.js; usamos nodes.get() para obtener array
-        const allNodes = nodes.get();
+        function createCards() {
+            var container = getContainer();
+            var net = getNetworkObject();
+            var nodesDS = getNodesDataSet(net);
+            if (!container || !net || !nodesDS) {
+                // si falla, intentamos reintentar más tarde
+                setTimeout(createCards, 200);
+                return;
+            }
 
-        allNodes.forEach(function(nd) {
-            const id = nd.id;
-            const pos = positions[id];
-            if (!pos) return;
+            // crear overlay si no existe
+            var overlay = document.getElementById('card-overlay');
+            if (!overlay) {
+                overlay = document.createElement('div');
+                overlay.id = 'card-overlay';
+                container.appendChild(overlay);
+            }
 
-            // convertir a coordenadas DOM sobre el canvas
-            const domPos = network.canvasToDOM(pos);
+            // limpiar overlay
+            overlay.innerHTML = '';
 
-            // crear tarjeta
-            const card = document.createElement('div');
-            card.className = 'node-card';
-            card.style.left = domPos.x + 'px';
-            card.style.top = domPos.y + 'px';
-            card.style.transform = 'translate(-50%, -50%)';
+            var positions = net.getPositions();
+            var allNodes = nodesDS.get();
 
-            const imgHtml = nd.image ? ('<img src="' + nd.image + '" alt=""/>') : '';
-            const lines = (nd.label || '').split('\n');
-            const title = lines[0] || '';
-            const author = lines[1] || nd.author || '';
+            allNodes.forEach(function(nd) {
+                var id = nd.id;
+                var pos = positions[id];
+                if (!pos) return;
 
-            card.innerHTML = imgHtml + '<div class="card-title">' + title + '</div>' + '<div class="card-author">' + author + '</div>';
+                var domPos = net.canvasToDOM(pos);
 
-            // permitir arrastrar la tarjeta y mover el nodo en la red
-            card.style.cursor = 'grab';
-            let dragging = false;
-            let startX = 0, startY = 0;
+                var card = document.createElement('div');
+                card.className = 'node-card';
+                card.style.left = domPos.x + 'px';
+                card.style.top = domPos.y + 'px';
+                card.style.transform = 'translate(-50%, -50%)';
 
-            card.addEventListener('mousedown', function(e) {
-                dragging = true;
-                startX = e.clientX;
-                startY = e.clientY;
-                card.style.cursor = 'grabbing';
-                e.preventDefault();
-            });
+                var imgHtml = nd.image ? ('<img src="' + nd.image + '" alt=""/>') : '';
+                var lines = (nd.label || '').split('\n');
+                var title = lines[0] || '';
+                var author = lines[1] || nd.author || '';
 
-            window.addEventListener('mousemove', function(e) {
-                if (!dragging) return;
-                const dx = e.clientX - startX;
-                const dy = e.clientY - startY;
-                startX = e.clientX;
-                startY = e.clientY;
-                const left = parseFloat(card.style.left || 0);
-                const top = parseFloat(card.style.top || 0);
-                card.style.left = (left + dx) + 'px';
-                card.style.top = (top + dy) + 'px';
-            });
+                card.innerHTML = imgHtml + '<div class="card-title">' + title + '</div>' + '<div class="card-author">' + author + '</div>';
 
-            window.addEventListener('mouseup', function(e) {
-                if (!dragging) return;
-                dragging = false;
+                // arrastrar tarjeta: actualiza visualmente y luego mueve el nodo en la red
                 card.style.cursor = 'grab';
+                var dragging = false;
+                var startX = 0, startY = 0;
 
-                // al dejar, convertimos la posición DOM a coordenadas canvas y movemos el nodo
-                const rect = container.getBoundingClientRect();
-                const x = parseFloat(card.style.left) - rect.left;
-                const y = parseFloat(card.style.top) - rect.top;
-                const canvasPos = network.DOMtoCanvas({ x: x, y: y });
+                card.addEventListener('mousedown', function(e) {
+                    dragging = true;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    card.style.cursor = 'grabbing';
+                    e.preventDefault();
+                });
 
-                // mover el nodo en la red y fijar posición
-                network.moveNode(id, canvasPos.x, canvasPos.y);
+                window.addEventListener('mousemove', function(e) {
+                    if (!dragging) return;
+                    var dx = e.clientX - startX;
+                    var dy = e.clientY - startY;
+                    startX = e.clientX;
+                    startY = e.clientY;
+                    var left = parseFloat(card.style.left || 0);
+                    var top = parseFloat(card.style.top || 0);
+                    card.style.left = (left + dx) + 'px';
+                    card.style.top = (top + dy) + 'px';
+                });
+
+                window.addEventListener('mouseup', function(e) {
+                    if (!dragging) return;
+                    dragging = false;
+                    card.style.cursor = 'grab';
+
+                    // al soltar, convertir posición DOM a canvas y mover el nodo
+                    var rect = container.getBoundingClientRect();
+                    var x = parseFloat(card.style.left) - rect.left;
+                    var y = parseFloat(card.style.top) - rect.top;
+                    var canvasPos = net.DOMtoCanvas({ x: x, y: y });
+
+                    try {
+                        net.moveNode(id, canvasPos.x, canvasPos.y);
+                    } catch(err) {
+                        console.warn('No se pudo mover el nodo:', err);
+                    }
+                });
+
+                overlay.appendChild(card);
             });
+        }
 
-            overlay.appendChild(card);
-        });
-    }
+        // re-renderizar tarjetas en eventos importantes
+        function attachEvents() {
+            var net = getNetworkObject();
+            if (!net) { setTimeout(attachEvents, 200); return; }
+            net.on('stabilizationIterationsDone', function() { setTimeout(createCards, 80); });
+            net.on('afterDrawing', function() { setTimeout(createCards, 20); });
+            net.on('dragEnd', function() { setTimeout(createCards, 50); });
+            net.on('zoom', function() { setTimeout(createCards, 20); });
+            window.addEventListener('resize', function() { setTimeout(createCards, 200); });
+        }
 
-    // renderizar tarjetas tras la estabilización y al hacer zoom/drag
-    network.on('stabilizationIterationsDone', function() { setTimeout(createCards, 80); });
-    network.on('afterDrawing', function() { setTimeout(createCards, 20); });
-    network.on('dragEnd', function() { setTimeout(createCards, 50); });
-    network.on('zoom', function() { setTimeout(createCards, 20); });
-    window.addEventListener('resize', function() { setTimeout(createCards, 200); });
-
-    // crear inicialmente
-    setTimeout(createCards, 100);
+        if (document.readyState === 'complete') {
+            attachEvents();
+            setTimeout(createCards, 200);
+        } else {
+            window.addEventListener('load', function() { attachEvents(); setTimeout(createCards, 200); });
+        }
+    })();
     </script>
 
     </body>
