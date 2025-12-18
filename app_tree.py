@@ -162,9 +162,9 @@ else:
                 "enabled": True,
                 "direction": "UD",
                 "sortMethod": "directed",
-                "levelSeparation": 330,
-                "nodeSpacing": 390,
-                "treeSpacing": 450,
+                "levelSeparation": 220,
+                "nodeSpacing": 260,
+                "treeSpacing": 300,
             }
         },
         "physics": {"enabled": False},
@@ -179,17 +179,41 @@ else:
 
     net.set_options(json.dumps(options))
 
-    # Añadir nodos: imagen como nodo (shape='image') y label con texto plano (dos líneas)
+    # Añadir nodos: estilo tarjeta oscura tipo carta
     for title, n in tree.nodes.items():
         label_text = f"{n.title}\n{n.author or ''}"
+
+        base_style = {
+            "font": {"size": 12, "color": "#EAEAEA"},
+            "borderWidth": 2,
+            "color": {
+                "border": "#6AA9FF",
+                "background": "#1E1E1E",
+                "highlight": {"border": "#9CC3FF", "background": "#2A2A2A"},
+                "hover": {"border": "#9CC3FF", "background": "#2A2A2A"},
+            },
+            "shadow": {"enabled": True, "color": "rgba(0,0,0,0.6)", "size": 10, "x": 2, "y": 2},
+        }
+
         if n.image_url:
-            try:
-                net.add_node(title, label=label_text, shape="image", image=n.image_url, size=60, font={"size": 12})
-            except Exception:
-                # si la URL falla por cualquier motivo, caer a caja de texto
-                net.add_node(title, label=label_text, shape="box", margin=10, font={"size": 12})
+            # tarjeta con imagen + texto debajo (estilo carta)
+            net.add_node(
+                title,
+                label=label_text,
+                shape="image",
+                image=n.image_url,
+                size=65,
+                **base_style,
+            )
         else:
-            net.add_node(title, label=label_text, shape="box", margin=10, font={"size": 12})
+            # tarjeta sin imagen
+            net.add_node(
+                title,
+                label=label_text,
+                shape="box",
+                margin=12,
+                **base_style,
+            )
 
     # Aristas
     for u, v in G.edges():
